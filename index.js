@@ -55,22 +55,25 @@ async function run() {
 
         // Add booking
         app.post('/book-room', async (req, res) => {
-            const { roomId, date, price, title, userEmail } = req.body;
-            if (!roomId || !date || !userEmail) {
-                return res.status(400).send({ success: false, message: 'Missing booking data' });
+            const { roomId, userEmail, date, ...otherBookingInfo } = req.body;
+            // Check if the room is already booked for the same date
+            const existingBooking = await bookingsCollection.findOne({ roomId, date: new Date(date) });
+            if (existingBooking) {
+                return res.status(400).send({ success: false, message: 'Room already booked for this date.' });
             }
-            const existing = await bookingsCollection.findOne({ roomId, userEmail });
-            if (existing) {
-                return res.send({ success: false, message: 'You already booked this room.' });
-            }
-            const booking = { roomId, date, price, title, userEmail };
-            const result = await bookingsCollection.insertOne(booking);
-            // Optional: set room as unavailable if needed
+            // If not booked, proceed to insert the booking
+            const bookingResult = await bookingsCollection.insertOne({
+                roomId,
+                userEmail,
+                date: new Date(date),
+                ...otherBookingInfo
+            });
+            // Optionally update room availability flag (if applicable)
             await roomsCollection.updateOne(
                 { _id: new ObjectId(roomId) },
-                { $set: { availability: false } }
+                { $set: { available: false } } // You can remove this if date-based availability is used
             );
-            res.send({ success: true, result });
+            res.send({ success: true, message: 'Room booked successfully.', bookingId: bookingResult.insertedId });
         });
         // Get all bookings for a specific user
         app.get('/my-bookings', async (req, res) => {
@@ -92,12 +95,20 @@ async function run() {
         });
         // Cancel a booking
         app.delete('/cancel-booking/:id', async (req, res) => {
-            const { id } = req.params;
-            const result = await bookingsCollection.deleteOne({ _id: new ObjectId(id) });
-            res.send({ success: result.deletedCount > 0 });
+            const bookingId = req.params.id;
+            const booking = await bookingsCollection.findOne({ _id: new ObjectId(bookingId) });
+            if (!booking) {
+                return res.status(404).send({ success: false, message: 'Booking not found.' });
+            }
+            const deleteResult = await bookingsCollection.deleteOne({ _id: new ObjectId(bookingId) });
+            // Make room available again
+            await roomsCollection.updateOne(
+                { _id: new ObjectId(booking.roomId) },
+                { $set: { available: true } }
+            );
+            res.send({ success: true, message: 'Booking cancelled successfully.' });
         });
         // Update booking date
-        // Assuming Express.js and MongoDB/Mongoose setup
         app.patch('/update-booking/:id', async (req, res) => {
             const bookingId = req.params.id;
             const { date } = req.body;
@@ -131,6 +142,7 @@ async function run() {
             res.send(result);
         });
 
+        
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
