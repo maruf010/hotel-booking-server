@@ -32,24 +32,94 @@ async function run() {
         const reviewsCollection = client.db('hotel-server').collection('reviews');
 
 
+        // GET /featured-rooms
+        app.get('/featured-rooms', async (req, res) => {
+            const topReviewed = await reviewsCollection.aggregate([
+                {
+                    $group: {
+                        _id: "$roomId",
+                        averageRating: { $avg: "$rating" },
+                        reviewCount: { $sum: 1 }
+                    }
+                },
+                {
+                    $sort: {
+                        averageRating: -1,
+                        reviewCount: -1
+                    }
+                },
+                { $limit: 6 }
+            ]).toArray();
+            const reviewedRoomIds = topReviewed.map(r => new ObjectId(r._id));
+            const reviewedRooms = await roomsCollection.find({ _id: { $in: reviewedRoomIds } }).toArray();
+            // Merge ratings into room objects
+            const enrichedReviewed = topReviewed.map(r => {
+                const room = reviewedRooms.find(room => room._id.toString() === r._id);
+                return {
+                    ...room,
+                    averageRating: r.averageRating,
+                    reviewCount: r.reviewCount
+                };
+            });
+            // Fetch fallback rooms with no reviews
+            const fallbackRooms = await roomsCollection.find({
+                _id: { $nin: reviewedRoomIds }
+            }).limit(6).toArray();
+            const fallbackFormatted = fallbackRooms.map(room => ({
+                ...room,
+                averageRating: 0,
+                reviewCount: 0
+            }));
+            // Combine and sort all, then take top 6
+            const finalRooms = [...enrichedReviewed, ...fallbackFormatted]
+                .sort((a, b) => {
+                    const ratingDiff = b.averageRating - a.averageRating;
+                    const reviewDiff = b.reviewCount - a.reviewCount;
+
+                    return ratingDiff !== 0 ? ratingDiff : reviewDiff;
+                })
+                .slice(0, 6);
+
+            res.send(finalRooms);
+        });
+
+        // Get all rooms (or rooms by user)
         app.get('/rooms', async (req, res) => {
-            const cursor = roomsCollection.find();
+            const { userEmail } = req.query;
+            const filter = userEmail ? { userEmail } : {};  // Filter only if userEmail provided
+            const cursor = roomsCollection.find(filter);
             const result = await cursor.toArray();
             res.send(result);
         });
+        // Get a single room by ID
         app.get('/rooms/:id', async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) };
             const result = await roomsCollection.findOne(query);
             res.send(result);
         });
+        // Add a new room
         app.post('/rooms', async (req, res) => {
             const newRoom = req.body;
             console.log(newRoom);
             const result = await roomsCollection.insertOne(newRoom);
             res.send(result);
-        })
-
+        });
+        //delete a room by ID and related reviews/bookings
+        app.delete('/rooms/:id', async (req, res) => {
+            const roomId = req.params.id;
+            // Delete the room
+            const deleteRoomResult = await roomsCollection.deleteOne({ _id: new ObjectId(roomId) });
+            // Delete related reviews
+            const deleteReviewResult = await reviewsCollection.deleteMany({ roomId });
+            // Delete related bookings
+            const deleteBookingResult = await bookingsCollection.deleteMany({ roomId });
+            res.send({
+                deletedRoom: deleteRoomResult.deletedCount,
+                deletedReviews: deleteReviewResult.deletedCount,
+                deletedBookings: deleteBookingResult.deletedCount
+            });
+        });
 
 
 
@@ -71,7 +141,7 @@ async function run() {
             // Optionally update room availability flag (if applicable)
             await roomsCollection.updateOne(
                 { _id: new ObjectId(roomId) },
-                { $set: { available: false } } // You can remove this if date-based availability is used
+                { $set: { available: false } }
             );
             res.send({ success: true, message: 'Room booked successfully.', bookingId: bookingResult.insertedId });
         });
@@ -112,19 +182,14 @@ async function run() {
         app.patch('/update-booking/:id', async (req, res) => {
             const bookingId = req.params.id;
             const { date } = req.body;
-            try {
-                const result = await bookingsCollection.updateOne(
-                    { _id: new ObjectId(bookingId) },
-                    { $set: { date: new Date(date) } }
-                );
-                if (result.modifiedCount > 0) {
-                    res.send({ success: true, message: 'Booking date updated successfully.' });
-                } else {
-                    res.send({ success: false, message: 'No changes made or booking not found.' });
-                }
-            } catch (error) {
-                console.error('Update booking error:', error);
-                res.status(500).send({ success: false, message: 'Server error.' });
+            const result = await bookingsCollection.updateOne(
+                { _id: new ObjectId(bookingId) },
+                { $set: { date: new Date(date) } }
+            );
+            if (result.modifiedCount > 0) {
+                res.send({ success: true, message: 'Booking date updated successfully.' });
+            } else {
+                res.send({ success: false, message: 'No changes made or booking not found.' });
             }
         });
 
@@ -135,14 +200,25 @@ async function run() {
             const result = await reviewsCollection.find({ roomId }).toArray();
             res.send(result);
         });
-        // Add a review
+        // Add a review with timestamp
         app.post('/reviews', async (req, res) => {
-            const review = req.body; // expects { roomId, user, comment }
+            const review = req.body;
+            review.timestamp = new Date();
             const result = await reviewsCollection.insertOne(review);
             res.send(result);
         });
+        // Get latest reviews sorted by timestamp (for homepage)
+        app.get('/latest-reviews', async (req, res) => {
+            const latestReviews = await reviewsCollection
+                .find()
+                .sort({ timestamp: -1 })
+                .limit(6)
+                .toArray();
+            res.send(latestReviews);
+        });
 
-        
+
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
