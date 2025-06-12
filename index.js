@@ -82,15 +82,14 @@ async function run() {
 
             res.send(finalRooms);
         });
-
-        // Get all rooms (or rooms by user)
+        // Get all rooms OR rooms added by a specific user
         app.get('/rooms', async (req, res) => {
-            const { userEmail } = req.query;
-            const filter = userEmail ? { userEmail } : {};  // Filter only if userEmail provided
-            const cursor = roomsCollection.find(filter);
-            const result = await cursor.toArray();
-            res.send(result);
+            const { email } = req.query;
+            const filter = email ? { email } : {};
+            const rooms = await roomsCollection.find(filter).toArray();
+            res.send(rooms);
         });
+
         // Get a single room by ID
         app.get('/rooms/:id', async (req, res) => {
             const id = req.params.id;
