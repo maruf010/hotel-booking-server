@@ -56,7 +56,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
     try {
-        await client.connect();
+        // await client.connect();
 
         const roomsCollection = client.db('hotel-server').collection('rooms');
         const bookingsCollection = client.db('hotel-server').collection('bookings');
@@ -66,11 +66,9 @@ async function run() {
         // Get rooms added by a specific user
         app.get('/rooms/myAdded-rooms', verifyFirebaseToken, async (req, res) => {
             const { email } = req.query;
-
             if (email !== req.decoded.email) {
                 return res.status(403).send({ message: 'Forbidden access' });
             }
-
             const filter = email ? { email } : {};
             const rooms = await roomsCollection.find(filter).toArray();
             res.send(rooms);
@@ -93,23 +91,21 @@ async function run() {
             const rooms = await roomsCollection.find(filter).toArray();
             res.json(rooms);
         });
-
-
-
-
-
-
         // Get a single room by ID
         app.get('/rooms/:id', async (req, res) => {
             const id = req.params.id;
             const result = await roomsCollection.findOne({ _id: new ObjectId(id) });
             res.send(result);
         });
-        // Add a new room
-        app.post('/rooms', async (req, res) => {
-            const newRoom = req.body;
-            const result = await roomsCollection.insertOne(newRoom);
-            res.send(result);
+        // Add a new room & verifyFirebaseToken
+        app.post('/rooms', verifyFirebaseToken, async (req, res) => {
+            const room = req.body;
+            // Ensure the user is only adding rooms for their own email
+            if (room.email !== req.decoded.email) {
+                return res.status(403).json({ message: 'Forbidden access' });
+            }
+            const result = await roomsCollection.insertOne(room);
+            res.json({ success: true, insertedId: result.insertedId });
         });
         // Update a room
         app.delete('/rooms/:id', async (req, res) => {
