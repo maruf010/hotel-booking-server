@@ -2,12 +2,15 @@ const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 5000;
 const admin = require("firebase-admin");
-const serviceAccount = require("./firebase-admin-key.json");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const moment = require('moment');
 const cron = require('node-cron');
+
+// const serviceAccount = require("./firebase-admin-key.json");
+const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
+const serviceAccount = JSON.parse(decoded);
 
 
 
@@ -58,9 +61,11 @@ async function run() {
     try {
         // await client.connect();
 
+        //Collections
         const roomsCollection = client.db('hotel-server').collection('rooms');
         const bookingsCollection = client.db('hotel-server').collection('bookings');
         const reviewsCollection = client.db('hotel-server').collection('reviews');
+
 
         // ========== ROOMS APIs ==========
         // Get rooms added by a specific user
@@ -107,7 +112,7 @@ async function run() {
             const result = await roomsCollection.insertOne(room);
             res.json({ success: true, insertedId: result.insertedId });
         });
-        // Update a room
+        // delete a my added room
         app.delete('/rooms/:id', async (req, res) => {
             const roomId = req.params.id;
 
@@ -123,8 +128,11 @@ async function run() {
         });
 
 
+
         // ========== FEATURED ROOMS ==========
+        //only rating
         app.get('/featured-rooms', async (req, res) => {
+
             const topReviewed = await reviewsCollection.aggregate([
                 {
                     $group: {
@@ -170,7 +178,9 @@ async function run() {
         });
 
 
+
         // ========== BOOKINGS ==========
+
         app.get('/my-bookings', verifyFirebaseToken, async (req, res) => {
             const { userEmail } = req.query;
 
@@ -194,10 +204,36 @@ async function run() {
         });
 
         //check if a room is already booked
+        // app.get('/already-booking', async (req, res) => {
+        //     const { roomId } = req.query;
+        //     const booking = await bookingsCollection.findOne({ roomId });
+        //     res.send({ alreadyBooked: !!booking });
+        // });
+        // Check if a room is already booked
         app.get('/already-booking', async (req, res) => {
-            const { roomId } = req.query;
-            const booking = await bookingsCollection.findOne({ roomId });
-            res.send({ alreadyBooked: !!booking });
+            try {
+                const { roomId } = req.query;
+
+                if (!roomId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'roomId is required'
+                    });
+                }
+
+                const booking = await bookingsCollection.findOne({ roomId });
+                res.json({
+                    success: true,
+                    alreadyBooked: !!booking
+                });
+
+            } catch (error) {
+                console.error('Error checking booking status:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to check booking status'
+                });
+            }
         });
 
         app.patch('/update-booking/:id', async (req, res) => {
@@ -262,19 +298,8 @@ async function run() {
         });
 
 
-        // ========== REVIEWS ==========
-        app.get('/reviews', async (req, res) => {
-            const roomId = req.query.roomId;
-            const result = await reviewsCollection.find({ roomId }).toArray();
-            res.send(result);
-        });
 
-        app.post('/reviews', async (req, res) => {
-            const review = req.body;
-            review.timestamp = new Date();
-            const result = await reviewsCollection.insertOne(review);
-            res.send(result);
-        });
+        // ========== REVIEWS ==========
 
         app.get('/latest-reviews', async (req, res) => {
             const latestReviews = await reviewsCollection
@@ -283,6 +308,146 @@ async function run() {
                 .toArray();
             res.send(latestReviews);
         });
+
+        // app.get('/reviews', async (req, res) => {
+        //     const roomId = req.query.roomId;
+        //     const result = await reviewsCollection.find({ roomId }).toArray();
+        //     res.send(result);
+        // });
+
+        app.post('/reviews', async (req, res) => {
+            const review = req.body;
+            review.timestamp = new Date();
+            review.userEmail = req.body.userEmail; 
+            const result = await reviewsCollection.insertOne(review);
+            res.send(result);
+        });
+
+        // GET - Get reviews for a specific room
+        app.get('/reviews', async (req, res) => {
+            try {
+                const { roomId } = req.query;
+
+                if (!roomId) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'roomId is required'
+                    });
+                }
+
+                const reviews = await reviewsCollection
+                    .find({ roomId })
+                    .sort({ timestamp: -1 })  // Newest first
+                    .toArray();
+
+                res.json({
+                    success: true,
+                    reviews
+                });
+
+            } catch (error) {
+                console.error('Error fetching reviews:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to fetch reviews'
+                });
+            }
+        });
+
+        // PATCH - Update a review
+        app.patch('/reviews/:id', verifyFirebaseToken, async (req, res) => {
+            try {
+                const reviewId = req.params.id;
+                const { comment, rating } = req.body;
+                const userEmail = req.decoded.email; // Get from verified token
+
+                // Validate input
+                if (!comment && !rating) {
+                    return res.status(400).json({
+                        success: false,
+                        message: 'Nothing to update'
+                    });
+                }
+
+                const updateData = {
+                    timestamp: new Date()
+                };
+
+                if (comment) updateData.comment = comment;
+                if (rating) {
+                    if (rating < 1 || rating > 5) {
+                        return res.status(400).json({
+                            success: false,
+                            message: 'Rating must be between 1 and 5'
+                        });
+                    }
+                    updateData.rating = Number(rating);
+                }
+
+                const result = await reviewsCollection.updateOne(
+                    {
+                        _id: new ObjectId(reviewId),
+                        userEmail: userEmail  // Ensure user owns the review
+                    },
+                    { $set: updateData }
+                );
+
+                if (result.modifiedCount === 0) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Review not found or not owned by user'
+                    });
+                }
+
+                res.json({
+                    success: true,
+                    message: 'Review updated successfully'
+                });
+
+            } catch (error) {
+                console.error('Error updating review:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to update review'
+                });
+            }
+        });
+
+        // DELETE - Delete a review
+        app.delete('/reviews/:id', verifyFirebaseToken, async (req, res) => {
+            try {
+                const reviewId = req.params.id;
+                const userEmail = req.decoded.email; // Get from verified token
+
+                const result = await reviewsCollection.deleteOne({
+                    _id: new ObjectId(reviewId),
+                    userEmail: userEmail  // Ensure user owns the review
+                });
+
+                if (result.deletedCount === 0) {
+                    return res.status(404).json({
+                        success: false,
+                        message: 'Review not found or not owned by user'
+                    });
+                }
+
+                res.json({
+                    success: true,
+                    message: 'Review deleted successfully'
+                });
+
+            } catch (error) {
+                console.error('Error deleting review:', error);
+                res.status(500).json({
+                    success: false,
+                    message: 'Failed to delete review'
+                });
+            }
+        });
+
+
+
+
 
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -293,9 +458,9 @@ async function run() {
 run().catch(console.dir);
 
 app.get('/', (req, res) => {
-    res.send('Hotel Booking running');
+    res.send('Hotel Booking running by silkCity');
 });
 
 app.listen(port, () => {
-    console.log(`hotel booking server is running on port ${port}`);
+    console.log(`Hotel booking server is running on port ${port}`);
 });
