@@ -268,7 +268,8 @@ async function run() {
             );
             res.send({ success: true, message: 'Booking cancelled successfully.' });
         });
-        // Auto-cancel expired bookings daily at midnight
+
+        // Backend-এর Cron Job (auto-cancel লজিক)
         cron.schedule('0 0 * * *', async () => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
