@@ -181,6 +181,18 @@ async function run() {
 
         // ========== BOOKINGS ==========
 
+        // app.get('/already-booking', async (req, res) => {
+        //     try {
+        //         if (!req.query.roomId) return res.status(400).json({ message: 'roomId required' });
+        //         const booking = await bookingsCollection.findOne({ roomId: req.query.roomId });
+        //         res.json({ success: true, alreadyBooked: !!booking });
+        //     } catch (err) {
+        //         console.error('already-booking error:', err);
+        //         res.status(500).json({ success: false, message: 'Server error' });
+        //     }
+        // });
+
+        //my booking
         app.get('/my-bookings', verifyFirebaseToken, async (req, res) => {
             const { userEmail } = req.query;
 
@@ -202,14 +214,6 @@ async function run() {
             const result = await bookingsCollection.insertOne(booking);
             res.send({ success: true, result });
         });
-
-        //check if a room is already booked
-        // app.get('/already-booking', async (req, res) => {
-        //     const { roomId } = req.query;
-        //     const booking = await bookingsCollection.findOne({ roomId });
-        //     res.send({ alreadyBooked: !!booking });
-        // });
-
         // Check if a room is already booked
         app.get('/already-booking', async (req, res) => {
             const { roomId } = req.query;
@@ -269,7 +273,7 @@ async function run() {
             res.send({ success: true, message: 'Booking cancelled successfully.' });
         });
 
-        // Backend-এর Cron Job (auto-cancel লজিক)
+        // Backend auto-cancel book date
         cron.schedule('0 0 * * *', async () => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
