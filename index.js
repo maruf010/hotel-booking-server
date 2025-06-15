@@ -209,31 +209,21 @@ async function run() {
         //     const booking = await bookingsCollection.findOne({ roomId });
         //     res.send({ alreadyBooked: !!booking });
         // });
+
         // Check if a room is already booked
         app.get('/already-booking', async (req, res) => {
-            try {
-                const { roomId } = req.query;
-
-                if (!roomId) {
-                    return res.status(400).json({
-                        success: false,
-                        message: 'roomId is required'
-                    });
-                }
-
-                const booking = await bookingsCollection.findOne({ roomId });
-                res.json({
-                    success: true,
-                    alreadyBooked: !!booking
-                });
-
-            } catch (error) {
-                console.error('Error checking booking status:', error);
-                res.status(500).json({
+            const { roomId } = req.query;
+            if (!roomId) {
+                return res.status(400).json({
                     success: false,
-                    message: 'Failed to check booking status'
+                    message: 'roomId is required'
                 });
             }
+            const booking = await bookingsCollection.findOne({ roomId });
+            res.json({
+                success: true,
+                alreadyBooked: !!booking
+            });
         });
 
         app.patch('/update-booking/:id', async (req, res) => {
@@ -282,11 +272,9 @@ async function run() {
         cron.schedule('0 0 * * *', async () => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
-
             const expiredBookings = await bookingsCollection.find({
                 date: { $lt: today }
             }).toArray();
-
             for (const booking of expiredBookings) {
                 await bookingsCollection.deleteOne({ _id: booking._id });
                 await roomsCollection.updateOne(
@@ -294,12 +282,17 @@ async function run() {
                     { $set: { available: true } }
                 );
             }
-            console.log(`Expired bookings cancelled: ${expiredBookings.length}`);
         });
 
 
 
         // ========== REVIEWS ==========
+
+        // app.get('/reviews', async (req, res) => {
+        //     const roomId = req.query.roomId;
+        //     const result = await reviewsCollection.find({ roomId }).toArray();
+        //     res.send(result);
+        // });
 
         app.get('/latest-reviews', async (req, res) => {
             const latestReviews = await reviewsCollection
@@ -309,16 +302,10 @@ async function run() {
             res.send(latestReviews);
         });
 
-        // app.get('/reviews', async (req, res) => {
-        //     const roomId = req.query.roomId;
-        //     const result = await reviewsCollection.find({ roomId }).toArray();
-        //     res.send(result);
-        // });
-
         app.post('/reviews', async (req, res) => {
             const review = req.body;
             review.timestamp = new Date();
-            review.userEmail = req.body.userEmail; 
+            review.userEmail = req.body.userEmail;
             const result = await reviewsCollection.insertOne(review);
             res.send(result);
         });
@@ -444,9 +431,6 @@ async function run() {
                 });
             }
         });
-
-
-
 
 
         await client.db("admin").command({ ping: 1 });
