@@ -181,17 +181,6 @@ async function run() {
 
         // ========== BOOKINGS ==========
 
-        // app.get('/already-booking', async (req, res) => {
-        //     try {
-        //         if (!req.query.roomId) return res.status(400).json({ message: 'roomId required' });
-        //         const booking = await bookingsCollection.findOne({ roomId: req.query.roomId });
-        //         res.json({ success: true, alreadyBooked: !!booking });
-        //     } catch (err) {
-        //         console.error('already-booking error:', err);
-        //         res.status(500).json({ success: false, message: 'Server error' });
-        //     }
-        // });
-
         //my booking
         app.get('/my-bookings', verifyFirebaseToken, async (req, res) => {
             const { userEmail } = req.query;
