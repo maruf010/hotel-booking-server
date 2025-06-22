@@ -6,7 +6,7 @@ const port = process.env.PORT || 5000;
 const admin = require("firebase-admin");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const moment = require('moment');
-const cron = require('node-cron');
+// const cron = require('node-cron');
 
 // const serviceAccount = require("./firebase-admin-key.json");
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
@@ -263,20 +263,20 @@ async function run() {
         });
 
         // Backend auto-cancel book date
-        cron.schedule('0 0 * * *', async () => {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-            const expiredBookings = await bookingsCollection.find({
-                date: { $lt: today }
-            }).toArray();
-            for (const booking of expiredBookings) {
-                await bookingsCollection.deleteOne({ _id: booking._id });
-                await roomsCollection.updateOne(
-                    { _id: new ObjectId(booking.roomId) },
-                    { $set: { available: true } }
-                );
-            }
-        });
+        // cron.schedule('0 0 * * *', async () => {
+        //     const today = new Date();
+        //     today.setHours(0, 0, 0, 0);
+        //     const expiredBookings = await bookingsCollection.find({
+        //         date: { $lt: today }
+        //     }).toArray();
+        //     for (const booking of expiredBookings) {
+        //         await bookingsCollection.deleteOne({ _id: booking._id });
+        //         await roomsCollection.updateOne(
+        //             { _id: new ObjectId(booking.roomId) },
+        //             { $set: { available: true } }
+        //         );
+        //     }
+        // });
 
 
 
@@ -427,7 +427,7 @@ async function run() {
         });
 
 
-        await client.db("admin").command({ ping: 1 });
+        // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
     } finally {
         // await client.close();
