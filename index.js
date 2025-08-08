@@ -6,7 +6,6 @@ const port = process.env.PORT || 5000;
 const admin = require("firebase-admin");
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const moment = require('moment');
-// const cron = require('node-cron');
 
 // const serviceAccount = require("./firebase-admin-key.json");
 const decoded = Buffer.from(process.env.FB_SERVICE_KEY, 'base64').toString('utf8')
