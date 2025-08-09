@@ -39,7 +39,7 @@ const verifyFirebaseToken = async (req, res, next) => {
         req.decoded = decoded;
         next();
     }
-    catch (error) {
+    catch (err) {
         return res.status(401).send({ message: 'Unauthorized access' });
     }
 };
