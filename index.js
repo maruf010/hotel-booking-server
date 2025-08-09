@@ -66,7 +66,7 @@ async function run() {
         const reviewsCollection = client.db('hotel-server').collection('reviews');
 
 
-        // ========== ROOMS APIs ==========
+        // ========= ROOMS APIs =========
         // Get rooms added by a specific user
         app.get('/rooms/myAdded-rooms', verifyFirebaseToken, async (req, res) => {
             const { email } = req.query;
