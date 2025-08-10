@@ -1,6 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 require('dotenv').config();
+const nodemailer = require("nodemailer");
+
 const app = express();
 const port = process.env.PORT || 5000;
 const admin = require("firebase-admin");
@@ -64,6 +66,52 @@ async function run() {
         const roomsCollection = client.db('hotel-server').collection('rooms');
         const bookingsCollection = client.db('hotel-server').collection('bookings');
         const reviewsCollection = client.db('hotel-server').collection('reviews');
+
+
+
+        console.log(process.env.hotel_silkcity_email);
+        console.log(process.env.hotel_silkcity_email_pass);
+        
+        // Contact form API
+        app.post("/api/contact", async (req, res) => {
+            const { name, email, phone, message } = req.body;
+
+            if (!name || !email || !phone || !message) {
+                return res.status(400).json({ error: "All fields are required" });
+            }
+
+            try {
+                // Nodemailer transporter
+                const transporter = nodemailer.createTransport({
+                    service: "gmail",
+                    auth: {
+                        user: process.env.hotel_silkcity_email,
+                        pass: process.env.hotel_silkcity_email_pass,
+                    }
+                });
+
+                // Email details
+                const mailOptions = {
+                    from: `"Website Contact" <${process.env.hotel_silkcity_email}>`,
+                    to: process.env.email,
+                    subject: "New Contact Form Submission",
+                    html: `
+                <h2>New Inquiry</h2>
+                <p><strong>Name:</strong> ${name}</p>
+                <p><strong>Email:</strong> ${email}</p>
+                <p><strong>Phone:</strong> ${phone}</p>
+                <p><strong>Message:</strong> ${message}</p>
+            `
+                };
+
+                await transporter.sendMail(mailOptions);
+                res.json({ success: true, message: "Message sent successfully!" });
+
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ error: "Something went wrong" });
+            }
+        });
 
 
         // ========= ROOMS APIs =========
