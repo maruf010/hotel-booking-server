@@ -71,7 +71,7 @@ async function run() {
 
         console.log(process.env.hotel_silkcity_email);
         console.log(process.env.hotel_silkcity_email_pass);
-        
+
         // Contact form API
         app.post("/api/contact", async (req, res) => {
             const { name, email, phone, message } = req.body;
@@ -81,26 +81,24 @@ async function run() {
             }
 
             try {
-                // Nodemailer transporter
                 const transporter = nodemailer.createTransport({
                     service: "gmail",
                     auth: {
                         user: process.env.hotel_silkcity_email,
-                        pass: process.env.hotel_silkcity_email_pass,
+                        pass: process.env.hotel_silkcity_email_pass
                     }
                 });
 
-                // Email details
                 const mailOptions = {
-                    from: `"Website Contact" <${process.env.hotel_silkcity_email}>`,
-                    to: process.env.email,
+                    from: `"${name}" <${email}>`, // এখানে ইউজারের email থাকবে
+                    to: process.env.hotel_silkcity_email,
                     subject: "New Contact Form Submission",
                     html: `
-                <h2>New Inquiry</h2>
+                <h3>New Inquiry from Website</h3>
                 <p><strong>Name:</strong> ${name}</p>
                 <p><strong>Email:</strong> ${email}</p>
                 <p><strong>Phone:</strong> ${phone}</p>
-                <p><strong>Message:</strong> ${message}</p>
+                <p><strong>Message:</strong><br/> ${message}</p>
             `
                 };
 
@@ -109,7 +107,7 @@ async function run() {
 
             } catch (error) {
                 console.error(error);
-                res.status(500).json({ error: "Something went wrong" });
+                res.status(500).json({ error: "Failed to send message" });
             }
         });
 
